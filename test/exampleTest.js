@@ -14,7 +14,7 @@ describe('Example', () => {
     const playerTwo = accounts[1];
 
     beforeEach(async () => {
-        deployer = new etherlime.EtherlimeGanacheDeployer(accountNine.secretKey);
+        let deployer = new etherlime.EtherlimeGanacheDeployer(accountNine.secretKey);
         let ecToolsInstance = await deployer.deploy(ecTools);
         let deployedContractWrapper = await deployer.deploy(rsp, {"ECTools": ecToolsInstance.contract.address});
 
@@ -23,7 +23,7 @@ describe('Example', () => {
 
         plOneContract = await deployedContractWrapper.contract.connect(playerOne.wallet);
         plTwoContract = await deployedContractWrapper.contract.connect(playerTwo.wallet);
-
+        console.log(playerOne.wallet);
         await plOneContract.openChannel({value: 500});
         await plTwoContract.joinChannel({value: 500});
     });
