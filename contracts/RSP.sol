@@ -13,8 +13,9 @@ contract RSP {
 
     address public disputePlayer;
 
-    // TODO: deposit = uint
-    mapping(address=>uint) public deposit;
+    uint256 public deposit;
+
+    mapping(address => uint) public addressToPrize;
 
     uint256 public endTime;
     uint256 public highestStateNonce;
@@ -46,29 +47,26 @@ contract RSP {
         _;
     }
 
-
-    // TODO: constructor
     function openChannel() public payable {
         require(playerOne == address(0));
         playerOne = msg.sender;
-        deposit[msg.sender] = msg.value;
+        addressToPrize[msg.sender] = msg.value;
+        deposit = msg.value.mul(2);
     }
 
     function joinChannel() public payable {
         require(playerOne != address(0));
-        require(msg.value == deposit[playerOne]);
+        require(msg.value == addressToPrize[playerOne]);
         playerTwo = msg.sender;
-        deposit[msg.sender] = msg.value;
+        addressToPrize[msg.sender] = msg.value;
     }
 
-    function closeChannel(uint256 _playerOnePrise,
-        uint256 _playerTwoPrise,
-        uint256 _nonce,
-        bytes _signedData) public onlyPlayer onlyNotDisputeActive {
+    function closeChannel(uint256 _nonce, address plOneAddr, uint256 _playerOnePrise, address plTwoAddr, uint256 _playerTwoPrise, bytes _signedData) public onlyPlayer onlyNotDisputeActive {
         // TODO: describe why we will need delimiter
-        bytes32 bytes32Message = keccak256(abi.encodePacked(_playerOnePrise, _playerTwoPrise, _nonce));
+        bytes32 bytes32Message = keccak256(abi.encodePacked(_nonce, plOneAddr, _playerOnePrise, plTwoAddr, _playerTwoPrise));
         address recoveredSigner = recover(bytes32Message, _signedData);
 
+        require(deposit == _playerOnePrise.add(_playerTwoPrise));
         if (msg.sender == playerOne) {
             disputePlayer = playerTwo;
         } else {
@@ -79,47 +77,46 @@ contract RSP {
 
         endTime = now + 2 minutes;
 
-        // TODO: require(deposit * 2)
-
-        deposit[playerOne] = _playerOnePrise;
-        deposit[playerTwo] = _playerTwoPrise;
+        addressToPrize[plOneAddr] = _playerOnePrise;
+        addressToPrize[plTwoAddr] = _playerTwoPrise;
         highestStateNonce = _nonce;
 
         dispute = true;
     }
 
-    function closeChannelDispute(uint256 _playerOnePrise,
-        uint256 _playerTwoPrise,
-        uint256 _nonce,
-        bytes _signedData) public onlyPlayer onlyWithinTimeLimits onlyDisputeActive {
+    function closeChannelDispute(uint256 _nonce, address plOneAddr, uint256 _playerOnePrise, address plTwoAddr, uint256 _playerTwoPrise, bytes _signedData) public onlyPlayer onlyWithinTimeLimits onlyDisputeActive {
         require(_nonce > highestStateNonce);
+        require(deposit == _playerOnePrise.add(_playerTwoPrise));
 
-        bytes32 bytes32Message = keccak256(abi.encodePacked(_playerOnePrise, _playerTwoPrise, _nonce));
+        bytes32 bytes32Message = keccak256(abi.encodePacked(_nonce, plOneAddr, _playerOnePrise, plTwoAddr, _playerTwoPrise));
         address recoveredSigner = recover(bytes32Message, _signedData);
 
         require(recoveredSigner != disputePlayer);
 
-        deposit[playerOne] = _playerOnePrise;
-        deposit[playerTwo] = _playerTwoPrise;
+        addressToPrize[plOneAddr] = _playerOnePrise;
+        addressToPrize[plTwoAddr] = _playerTwoPrise;
 
-        // TODO: continue dispute for other player
-        endTime = now;
+        if (msg.sender == playerOne && msg.sender == disputePlayer) {
+            disputePlayer = playerTwo;
+        } else if (msg.sender == playerTwo && msg.sender == disputePlayer) {
+            disputePlayer = playerOne;
+        }
 
-
+        endTime = now + 2 minutes;
     }
 
     // TODO: closeChannelDispute within next Game
 
     function payPrizes() public onlyPlayer onlyAfterDisputePeriod {
-        // : TODO payout > deposit
-        require(deposit[msg.sender] > 0);
-        uint priseForPlayer = deposit[msg.sender];
-        deposit[msg.sender] = 0;
+
+        require(addressToPrize[msg.sender] > 0);
+        uint priseForPlayer = addressToPrize[msg.sender];
+        addressToPrize[msg.sender] = 0;
         msg.sender.transfer(priseForPlayer);
 
-//        if (this.balance == 0) {
-//            selfdestruct();
-//        }
+        if (this.balance == 0) {
+            selfdestruct(this);
+        }
     }
 
     function recover(bytes32 _hash, bytes _signedDataByPlayer) internal pure returns (address) {
